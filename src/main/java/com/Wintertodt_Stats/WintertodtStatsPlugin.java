@@ -8,7 +8,10 @@ import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.InventoryID;
 import net.runelite.api.events.GameTick;
+import net.runelite.api.events.GameStateChanged;
+import net.runelite.api.GameState;
 import net.runelite.api.ChatMessageType;
+import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
@@ -49,6 +52,7 @@ public class WintertodtStatsPlugin extends Plugin
     private int lastRewardPoints;
     private static final Pattern IncrementalPattern = Pattern.compile("You are owed (\\d+) more rewards from the cart\\.");
     private static final Pattern OwedPattern = Pattern.compile("You're now owed (\\d+) rewards\\.");
+    private static final Pattern ResetPattern = Pattern.compile("You think you've taken as much as you're owed from the reward cart\\.");
     private boolean sessionStarted = false;
 
     @Override
@@ -127,6 +131,15 @@ public class WintertodtStatsPlugin extends Plugin
 
         String msg = event.getMessage();
 
+        // Reset check (must come before other handlers)
+        Matcher resetMatcher = ResetPattern.matcher(msg);
+        if (resetMatcher.find())
+        {
+            log.debug("Rewards claimed – resetting stats.");
+            resetCounters();
+            return;
+        }
+
         Matcher owed = OwedPattern.matcher(msg);
         if (owed.find())
         {
@@ -142,12 +155,6 @@ public class WintertodtStatsPlugin extends Plugin
             rewardPoints = val;
             lastRewardPoints = val;
             return;
-        }
-
-        if (msg.equals("You think you've taken as much as you're owed from the reward cart."))
-        {
-            log.debug("Rewards claimed – resetting stats.");
-            resetCounters();
         }
     }
 
@@ -180,6 +187,8 @@ public class WintertodtStatsPlugin extends Plugin
         }
     }
 
+
+
     public int getRewardPoints() { return rewardPoints; }
     public int getLogsChopped() { return logsChopped; }
     public int getLogsFletched() { return logsFletched; }
@@ -188,7 +197,27 @@ public class WintertodtStatsPlugin extends Plugin
     public int getXpPerHour()
     {
         long sec = Duration.between(startTime, Instant.now()).getSeconds();
-        return sec > 0 ? (int)(totalXpGained * 3600L / sec) : 0;
+        // Suppress XP/hr spikes during the first 10 seconds after startup or relog
+        if (sec < 10)
+        {
+            return 0;
+        }
+        return (int)(totalXpGained * 3600L / sec);
+    }
+
+    @Subscribe
+    public void onGameStateChanged(GameStateChanged ev)
+    {
+        if (ev.getGameState() == GameState.LOGGED_IN)
+        {
+            startTime = Instant.now();
+            totalXpGained = 0;
+            lastXpMap.clear();
+            for (Skill skill : Skill.values())
+            {
+                lastXpMap.put(skill, client.getSkillExperience(skill));
+            }
+        }
     }
 
     private void resetCounters()
