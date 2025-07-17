@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Client;
 import net.runelite.api.Skill;
 import net.runelite.api.events.ChatMessage;
+import net.runelite.api.events.CommandExecuted;
 import net.runelite.api.events.ItemContainerChanged;
 import net.runelite.api.InventoryID;
 import net.runelite.api.events.GameTick;
@@ -12,6 +13,7 @@ import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.GameState;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.widgets.WidgetInfo;
+import net.runelite.api.Item;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
@@ -25,6 +27,7 @@ import java.util.EnumMap;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.Arrays;
 
 @Slf4j
 @PluginDescriptor(
@@ -43,30 +46,39 @@ public class WintertodtStatsPlugin extends Plugin
     @Inject private OverlayManager overlayManager;
     @Inject private WintertodtStatsOverlay overlay;
     @Inject private WintertodtStatsConfig config;
+    @Inject private ConfigManager configManager;
 
     private int rewardPoints, logsChopped, logsFletched, potionsMade;
     private int lastRootCount, lastKindlingCount, lastPotionCount;
     private Instant startTime;
+    private Instant xpSuppressUntil;
     private Map<Skill, Integer> lastXpMap;
     private int totalXpGained;
+    private int xpBaseline;
     private int lastRewardPoints;
     private static final Pattern IncrementalPattern = Pattern.compile("You are owed (\\d+) more rewards from the cart\\.");
     private static final Pattern OwedPattern = Pattern.compile("You're now owed (\\d+) rewards\\.");
     private static final Pattern ResetPattern = Pattern.compile("You think you've taken as much as you're owed from the reward cart\\.");
-    private boolean sessionStarted = false;
 
     @Override
     protected void startUp()
     {
         startTime = Instant.now();
+        // Load persisted stats
+        rewardPoints = config.rewardPoints();
+        totalXpGained = config.totalXpGained();
+        xpBaseline = totalXpGained;
+        logsChopped = config.logsChopped();
+        logsFletched = config.logsFletched();
+        potionsMade = config.potionsMade();
+
+        xpSuppressUntil = startTime.plusSeconds(10);
         lastXpMap = new EnumMap<>(Skill.class);
         for (Skill skill : Skill.values())
         {
             lastXpMap.put(skill, client.getSkillExperience(skill));
         }
-        rewardPoints = logsChopped = logsFletched = potionsMade = 0;
         lastRootCount = lastKindlingCount = lastPotionCount = 0;
-        totalXpGained = 0;
         lastRewardPoints = 0;
         overlayManager.add(overlay);
         log.debug("Wintertodt Reward Counter started.");
@@ -75,6 +87,7 @@ public class WintertodtStatsPlugin extends Plugin
     @Override
     protected void shutDown()
     {
+        saveStats();
         overlayManager.remove(overlay);
         log.debug("Wintertodt Reward Counter stopped.");
     }
@@ -119,6 +132,7 @@ public class WintertodtStatsPlugin extends Plugin
         lastRootCount = roots;
         lastKindlingCount = kindling;
         lastPotionCount = potions;
+        saveStats();
     }
 
     @Subscribe
@@ -146,6 +160,7 @@ public class WintertodtStatsPlugin extends Plugin
             int val = Integer.parseInt(owed.group(1));
             rewardPoints = val;
             lastRewardPoints = val;
+            saveStats();
             return;
         }
         Matcher incr = IncrementalPattern.matcher(msg);
@@ -154,35 +169,38 @@ public class WintertodtStatsPlugin extends Plugin
             int val = Integer.parseInt(incr.group(1));
             rewardPoints = val;
             lastRewardPoints = val;
+            saveStats();
             return;
+        }
+    }
+
+    @Subscribe
+    public void onCommandExecuted(CommandExecuted event)
+    {
+        if (event.getCommand().equalsIgnoreCase("resetxp"))
+        {
+            totalXpGained = 0;
+            xpBaseline = 0;
+            saveStats();
+            client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "WintertodtStats: Total XP reset.", null);
         }
     }
 
     @Subscribe
     public void onGameTick(GameTick event)
     {
-        // Initialize session
-        if (!sessionStarted)
-        {
-            sessionStarted = true;
-            startTime = Instant.now();
-            lastXpMap = new EnumMap<>(Skill.class);
-            for (Skill skill : Skill.values())
-            {
-                lastXpMap.put(skill, client.getSkillExperience(skill));
-            }
-            return;
-        }
-
-        // XP tracking for all skills
+        // XP tracking with warm-up suppression
+        Instant now = Instant.now();
         for (Skill skill : Skill.values())
         {
             int xp = client.getSkillExperience(skill);
             int prev = lastXpMap.getOrDefault(skill, xp);
-            if (xp > prev)
+            // Only accumulate XP after warm-up
+            if (!now.isBefore(xpSuppressUntil) && xp > prev)
             {
                 totalXpGained += xp - prev;
             }
+            // Always update baseline
             lastXpMap.put(skill, xp);
         }
     }
@@ -196,13 +214,18 @@ public class WintertodtStatsPlugin extends Plugin
     public int getTotalXpGained() { return totalXpGained; }
     public int getXpPerHour()
     {
-        long sec = Duration.between(startTime, Instant.now()).getSeconds();
-        // Suppress XP/hr spikes during the first 10 seconds after startup or relog
-        if (sec < 10)
+        // Suppress XP/hr spikes during the warm-up period
+        if (Instant.now().isBefore(xpSuppressUntil))
         {
             return 0;
         }
-        return (int)(totalXpGained * 3600L / sec);
+        long secondsElapsed = Duration.between(startTime, Instant.now()).getSeconds();
+        if (secondsElapsed <= 0)
+        {
+            return 0;
+        }
+        int sessionXp = totalXpGained - xpBaseline;
+        return (int) (sessionXp * 3600L / secondsElapsed);
     }
 
     @Subscribe
@@ -211,12 +234,25 @@ public class WintertodtStatsPlugin extends Plugin
         if (ev.getGameState() == GameState.LOGGED_IN)
         {
             startTime = Instant.now();
-            totalXpGained = 0;
             lastXpMap.clear();
             for (Skill skill : Skill.values())
             {
                 lastXpMap.put(skill, client.getSkillExperience(skill));
             }
+
+            // Re-baseline inventory counts after relog
+            lastRootCount = Arrays.stream(client.getItemContainer(InventoryID.INVENTORY).getItems())
+                .filter(item -> item.getId() == BRUMA_ROOT)
+                .mapToInt(Item::getQuantity).sum();
+            lastKindlingCount = Arrays.stream(client.getItemContainer(InventoryID.INVENTORY).getItems())
+                .filter(item -> item.getId() == BRUMA_KINDLING)
+                .mapToInt(Item::getQuantity).sum();
+            lastPotionCount = Arrays.stream(client.getItemContainer(InventoryID.INVENTORY).getItems())
+                .filter(item -> item.getId() == WARM_POTION)
+                .mapToInt(Item::getQuantity).sum();
+
+            xpBaseline = totalXpGained;
+            xpSuppressUntil = startTime.plusSeconds(10);
         }
     }
 
@@ -226,5 +262,16 @@ public class WintertodtStatsPlugin extends Plugin
         lastRootCount = lastKindlingCount = lastPotionCount = 0;
         totalXpGained = 0;
         lastRewardPoints = 0;
+        saveStats();
+    }
+
+    private void saveStats()
+    {
+        String group = "wintertodtStats";
+        configManager.setConfiguration(group, "rewardPoints", rewardPoints);
+        configManager.setConfiguration(group, "totalXpGained", totalXpGained);
+        configManager.setConfiguration(group, "logsChopped", logsChopped);
+        configManager.setConfiguration(group, "logsFletched", logsFletched);
+        configManager.setConfiguration(group, "potionsMade", potionsMade);
     }
 }

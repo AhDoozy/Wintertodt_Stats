@@ -1,23 +1,69 @@
-# Wintertodt Stats Overlay
-A RuneLite plugin to track and display Wintertodt statistics in real time with an on-screen overlay. It monitors:
-- Supply crate **Rewards** owed (handles multiple chat message variants and displays in green/red if increasing or decreasing).
-- **XP per Hour** and **Total XP** gained during a session (suppressed until 10 seconds after startup or relogin).
-- Automatic reset of XP and start time on relogin.
-- Overlay text coloring: rewards value displays green when unchanged or increased, red when decreased.
-- **XP per Hour** and **Total XP** gained during a session.
-  - XP per hour calculation suppresses display until 10 seconds after startup or relogin.
-  The overlay is configurable, allowing each stat to be toggled on or off, and large numbers are formatted with a ‘k’ suffix for readability.
+# 🎯 Wintertodt Stats Overlay
 
-## Change Log
+A **RuneLite** plugin that tracks and displays your Wintertodt session performance **in real time** via an on-screen overlay.
 
-### 2025-07-16
+---
 
-- Removed logs/potions tracking; streamlined to rewards and XP stats.
-- Implemented XP tracking for all skills with per-hour calculation.
-- Filtered chat message parsing to system messages only.
-- Renamed and reordered overlay labels for clarity.
-- Fixed reward counter to set values from “You’re now owed” chat messages.
-- Renamed plugin to “Wintertodt Stats” and updated runelite-plugin.properties displayName.
-- Updated XP per hour to suppress rates for first 10 seconds and reset on relogin (via GameStateChanged).
-- Improved chat parsing: handled “You are owed X more rewards…”, “You're now owed X…”, and reset on “take as much as you're owed” via dialog detection.
-- Added overlay text color: rewards value displays green when unchanged or increased, red when decreased.
+## Description
+
+Stay on top of your Wintertodt grind with:
+
+- 🔋 **Persistent Stats**:  
+  - Stats saved across sessions.
+  - Reward points, logs, and potions persisting through relogs  
+- 💥 **Session Accuracy**:  
+  - XP/hr calculation resets on relog to avoid spikes  
+  - Baseline snapshot ensures only **session** gains are shown  
+- 🛠️ **In-Chat Testing Command**:  
+  - Type `::resetxp` in-game to zero your Total XP counter for testing  
+- 🎨 **Clean Overlay**:  
+  - Configurable toggles for each stat  
+  - Formatted numbers with **k** (thousands) and **M** (millions) suffixes
+
+---
+
+## ⚙️ Configuration
+
+Adjust your overlay via the RuneLite **Settings** tab:
+
+| Setting                | Description                                    |
+|------------------------|------------------------------------------------|
+| Show Reward Points     | Display current owed supply crate rewards      |
+| Show Total XP          | Display cumulative XP gained this session      |
+| Show XP/hr             | Display rate of XP per hour                    |
+| Show Logs Chopped      | Display number of logs chopped                 |
+| Show Potions Made      | Display number of potions brewed               |
+| Format Numbers (k/M)   | Toggle compact formatting for large numbers    |
+
+---
+
+## 🚀 Usage
+
+- **Overlay**  
+  - Displays live stats while you play Wintertodt.  
+  - Automatically resets XP/hr baseline on relog.  
+- **Testing Command**  
+  - In chat, type `::resetxp` to reset your Total XP counter and baseline.  
+
+---
+
+## 📝 Change Log
+
+#### 2025-07-17 • v1.2.0
+
+- ✔️ **Feature**: Added `xpBaseline` to preserve session XP/hr accuracy on relog  
+- ✔️ **Enhancement**: Number formatting updated to support **M** (millions) suffix  
+- 🔧 **Fix**: Removed auto-save on login to prevent overwriting manual resets  
+- 🛠️ **Dev**: Introduced `::resetxp` command for in-chat testing of XP reset  
+  
+
+#### 2025-07-16 • v1.1.0
+
+- **Initial Release**  
+- Session XP & XP/hr tracking (suppressed for first 10s)  
+- Persistent reward points, logs chopped, potions made  
+- Overlay toggles and basic `k` suffix formatting  
+
+---
+
+&copy; 2025 **AhDoozy** • [GitHub Repo](https://github.com/YourName/Wintertodt-Stats-Overlay)

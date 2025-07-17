@@ -29,11 +29,18 @@ public class WintertodtStatsOverlay extends Overlay
     }
 
     /**
-     * Format large numbers into 'k' notation.
+     * Format large numbers into 'k' and 'M' notation.
      */
     private static String formatNumber(int value)
     {
-        if (value >= 1000) return (value / 1000) + "k";
+        if (value >= 1_000_000)
+        {
+            return (value / 1_000_000) + "M";
+        }
+        if (value >= 1_000)
+        {
+            return (value / 1_000) + "k";
+        }
         return Integer.toString(value);
     }
 
@@ -68,18 +75,22 @@ public class WintertodtStatsOverlay extends Overlay
 
         if (config.showXpPerHour())
         {
-            panelComponent.getChildren().add(LineComponent.builder()
-                .left("XP/hr")
-                .right(formatNumber(plugin.getXpPerHour()))
-                .build());
+            panelComponent.getChildren().add(
+                LineComponent.builder()
+                    .left("XP/hr")
+                    .right(formatNumber(plugin.getXpPerHour()))
+                    .build()
+            );
         }
 
         if (config.showTotalXp())
         {
-            panelComponent.getChildren().add(LineComponent.builder()
-                .left("Total XP")
-                .right(formatNumber(plugin.getTotalXpGained()))
-                .build());
+            panelComponent.getChildren().add(
+                LineComponent.builder()
+                    .left("Total XP")
+                    .right(formatNumber(plugin.getTotalXpGained()))
+                    .build()
+            );
         }
 
         return panelComponent.render(graphics);
