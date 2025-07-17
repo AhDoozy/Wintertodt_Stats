@@ -13,6 +13,8 @@ import net.runelite.api.events.GameStateChanged;
 import net.runelite.api.GameState;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.widgets.WidgetInfo;
+import net.runelite.api.events.WidgetLoaded;
+import net.runelite.api.widgets.Widget;
 import net.runelite.api.Item;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
@@ -53,12 +55,13 @@ public class WintertodtStatsPlugin extends Plugin
     private Instant startTime;
     private Instant xpSuppressUntil;
     private Map<Skill, Integer> lastXpMap;
-    private int totalXpGained;
+    private int sessionXpGained;
     private int xpBaseline;
     private int lastRewardPoints;
     private static final Pattern IncrementalPattern = Pattern.compile("You are owed (\\d+) more rewards from the cart\\.");
     private static final Pattern OwedPattern = Pattern.compile("You're now owed (\\d+) rewards\\.");
     private static final Pattern ResetPattern = Pattern.compile("You think you've taken as much as you're owed from the reward cart\\.");
+    private static final Pattern UnowedPattern = Pattern.compile("You aren['’]t owed any rewards from the cart\\.");
 
     @Override
     protected void startUp()
@@ -66,8 +69,8 @@ public class WintertodtStatsPlugin extends Plugin
         startTime = Instant.now();
         // Load persisted stats
         rewardPoints = config.rewardPoints();
-        totalXpGained = config.totalXpGained();
-        xpBaseline = totalXpGained;
+        sessionXpGained = config.sessionXpGained();
+        xpBaseline = sessionXpGained;
         logsChopped = config.logsChopped();
         logsFletched = config.logsFletched();
         potionsMade = config.potionsMade();
@@ -145,6 +148,15 @@ public class WintertodtStatsPlugin extends Plugin
 
         String msg = event.getMessage();
 
+        // Reset when told no more rewards are owed
+        Matcher unowedMatcher = UnowedPattern.matcher(msg);
+        if (unowedMatcher.matches())
+        {
+            log.debug("No rewards owed – resetting stats.");
+            resetCounters();
+            return;
+        }
+
         // Reset check (must come before other handlers)
         Matcher resetMatcher = ResetPattern.matcher(msg);
         if (resetMatcher.find())
@@ -179,7 +191,7 @@ public class WintertodtStatsPlugin extends Plugin
     {
         if (event.getCommand().equalsIgnoreCase("resetxp"))
         {
-            totalXpGained = 0;
+            sessionXpGained = 0;
             xpBaseline = 0;
             saveStats();
             client.addChatMessage(ChatMessageType.GAMEMESSAGE, "", "WintertodtStats: Total XP reset.", null);
@@ -198,7 +210,7 @@ public class WintertodtStatsPlugin extends Plugin
             // Only accumulate XP after warm-up
             if (!now.isBefore(xpSuppressUntil) && xp > prev)
             {
-                totalXpGained += xp - prev;
+                sessionXpGained += xp - prev;
             }
             // Always update baseline
             lastXpMap.put(skill, xp);
@@ -211,7 +223,7 @@ public class WintertodtStatsPlugin extends Plugin
     public int getLogsChopped() { return logsChopped; }
     public int getLogsFletched() { return logsFletched; }
     public int getPotionsMade() { return potionsMade; }
-    public int getTotalXpGained() { return totalXpGained; }
+    public int getSessionXpGained() { return sessionXpGained; }
     public int getXpPerHour()
     {
         // Suppress XP/hr spikes during the warm-up period
@@ -224,8 +236,17 @@ public class WintertodtStatsPlugin extends Plugin
         {
             return 0;
         }
-        int sessionXp = totalXpGained - xpBaseline;
+        int sessionXp = sessionXpGained - xpBaseline;
         return (int) (sessionXp * 3600L / secondsElapsed);
+    }
+
+    /**
+     * Gets the Instant until which XP gains are suppressed.
+     * @return the suppression end Instant
+     */
+    public Instant getXpSuppressUntil()
+    {
+        return xpSuppressUntil;
     }
 
     @Subscribe
@@ -233,6 +254,7 @@ public class WintertodtStatsPlugin extends Plugin
     {
         if (ev.getGameState() == GameState.LOGGED_IN)
         {
+            sessionXpGained = config.sessionXpGained();
             startTime = Instant.now();
             lastXpMap.clear();
             for (Skill skill : Skill.values())
@@ -251,8 +273,29 @@ public class WintertodtStatsPlugin extends Plugin
                 .filter(item -> item.getId() == WARM_POTION)
                 .mapToInt(Item::getQuantity).sum();
 
-            xpBaseline = totalXpGained;
+            xpBaseline = sessionXpGained;
             xpSuppressUntil = startTime.plusSeconds(10);
+        }
+    }
+
+    @Subscribe
+    public void onWidgetLoaded(WidgetLoaded event)
+    {
+        // Handle click-to-continue overlay for reward reset
+        if (event.getGroupId() == WidgetInfo.DIALOG_SPRITE_TEXT.getGroupId())
+        {
+            Widget widget = client.getWidget(WidgetInfo.DIALOG_SPRITE_TEXT.getGroupId(),
+                                            WidgetInfo.DIALOG_SPRITE_TEXT.getChildId());
+            if (widget != null)
+            {
+                // Only check the first line of the dialog text to match our reset message
+                String firstLine = widget.getText().split("\\n")[0];
+                if (ResetPattern.matcher(firstLine).matches())
+                {
+                    log.debug("Rewards claimed via overlay – resetting stats.");
+                    resetCounters();
+                }
+            }
         }
     }
 
@@ -260,7 +303,7 @@ public class WintertodtStatsPlugin extends Plugin
     {
         rewardPoints = logsChopped = logsFletched = potionsMade = 0;
         lastRootCount = lastKindlingCount = lastPotionCount = 0;
-        totalXpGained = 0;
+        sessionXpGained = 0;
         lastRewardPoints = 0;
         saveStats();
     }
@@ -269,7 +312,7 @@ public class WintertodtStatsPlugin extends Plugin
     {
         String group = "wintertodtStats";
         configManager.setConfiguration(group, "rewardPoints", rewardPoints);
-        configManager.setConfiguration(group, "totalXpGained", totalXpGained);
+        config.setSessionXpGained(sessionXpGained);
         configManager.setConfiguration(group, "logsChopped", logsChopped);
         configManager.setConfiguration(group, "logsFletched", logsFletched);
         configManager.setConfiguration(group, "potionsMade", potionsMade);

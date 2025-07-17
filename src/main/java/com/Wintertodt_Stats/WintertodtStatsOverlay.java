@@ -10,6 +10,7 @@ import net.runelite.client.ui.overlay.components.PanelComponent;
 import java.awt.Dimension;
 import java.awt.Graphics2D;
 import javax.inject.Inject;
+import java.time.Instant;
 
 public class WintertodtStatsOverlay extends Overlay
 {
@@ -78,17 +79,18 @@ public class WintertodtStatsOverlay extends Overlay
             panelComponent.getChildren().add(
                 LineComponent.builder()
                     .left("XP/hr")
-                    .right(formatNumber(plugin.getXpPerHour()))
+                    .right(String.valueOf(plugin.getXpPerHour()))
                     .build()
             );
         }
 
         if (config.showTotalXp())
         {
+            String xpText = String.valueOf(plugin.getSessionXpGained());
             panelComponent.getChildren().add(
                 LineComponent.builder()
                     .left("Total XP")
-                    .right(formatNumber(plugin.getTotalXpGained()))
+                    .right(xpText)
                     .build()
             );
         }

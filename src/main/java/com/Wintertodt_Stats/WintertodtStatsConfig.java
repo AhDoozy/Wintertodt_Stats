@@ -94,64 +94,25 @@ public interface WintertodtStatsConfig extends Config
     void setRewardPoints(int rewardPoints);
 
     @ConfigItem(
-        keyName = "totalXpGained",
+        keyName = "sessionXpGained",
         name = "Stored Total XP",
         description = "Persisted total Firemaking XP gained",
         position = 8
     )
-    default int totalXpGained()
+    default int sessionXpGained()
     {
         return 0;
     }
 
     @ConfigItem(
-        keyName = "totalXpGained",
+        keyName = "sessionXpGained",
         name = "Stored Total XP",
         description = "Persisted total Firemaking XP gained",
         position = 8,
         hidden = true
     )
-    void setTotalXpGained(int totalXpGained);
+    void setSessionXpGained(int sessionXpGained);
 
-    @ConfigItem(
-        keyName = "roundsCompleted",
-        name = "Stored Rounds Completed",
-        description = "Persisted number of Wintertodt rounds completed",
-        position = 9
-    )
-    default int roundsCompleted()
-    {
-        return 0;
-    }
-
-    @ConfigItem(
-        keyName = "roundsCompleted",
-        name = "Stored Rounds Completed",
-        description = "Persisted number of Wintertodt rounds completed",
-        position = 9,
-        hidden = true
-    )
-    void setRoundsCompleted(int roundsCompleted);
-
-    @ConfigItem(
-        keyName = "highestRoundScore",
-        name = "Stored Highest Round Score",
-        description = "Persisted highest score achieved in a Wintertodt round",
-        position = 10
-    )
-    default int highestRoundScore()
-    {
-        return 0;
-    }
-
-    @ConfigItem(
-        keyName = "highestRoundScore",
-        name = "Stored Highest Round Score",
-        description = "Persisted highest score achieved in a Wintertodt round",
-        position = 10,
-        hidden = true
-    )
-    void setHighestRoundScore(int highestRoundScore);
 
     @ConfigItem(
         keyName = "logsChopped",
